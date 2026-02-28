@@ -2,145 +2,162 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Canvas Mobile Game</title>
+    <title>Lattice Bacteria Puzzle</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
-        canvas { display: block; background: #87CEEB; margin: 0 auto; }
-        #ui { position: absolute; top: 10px; left: 10px; color: white; font-size: 20px; pointer-events: none; }
+        body { margin: 0; background: #121212; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; touch-action: none; }
+        #header { text-align: center; padding: 10px; z-index: 10; }
+        h2 { margin: 0; color: #4db8ff; }
+        p { font-size: 14px; opacity: 0.8; margin: 5px 0; }
+        canvas { background: #1e1e1e; border: 2px solid #333; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        #controls { margin-top: 15px; }
+        button { padding: 10px 20px; font-size: 16px; background: #4db8ff; border: none; border-radius: 5px; color: #121212; font-weight: bold; cursor: pointer; }
+        #status { margin-top: 10px; font-weight: bold; color: #ffeb3b; }
     </style>
 </head>
 <body>
-    <div id="ui">Score: 0</div>
+    <div id="header">
+        <h2>Bacteria Multiplier</h2>
+        <p>Tap a cell to split it Up and Right.</p>
+        <p>Goal: Clear the highlighted 4x4 box!</p>
+    </div>
+
     <canvas id="gameCanvas"></canvas>
+
+    <div id="status">Moves: 0 | Cells in Box: 1</div>
+    <div id="controls">
+        <button onclick="resetGame()">Reset Puzzle</button>
+    </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const ui = document.getElementById('ui');
+        const statusEl = document.getElementById('status');
 
-        // Resize canvas to fit screen
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        const GRID_RES = 10; // 10x10 grid
+        let cellSize;
+        let margin = 40;
+        
+        // Use a Set of strings "x,y" to track bacteria positions
+        let bacteria = new Set();
+        let moves = 0;
 
-        let score = 0;
-        let gameActive = true;
-
-        const player = {
-            x: 50,
-            y: canvas.height - 50,
-            size: 30,
-            dy: 0,
-            jumpForce: 12,
-            gravity: 0.6,
-            grounded: false
-        };
-
-        const obstacles = [];
-        let spawnTimer = 0;
-
-        function drawPlayer() {
-            ctx.fillStyle = '#FF5733';
-            ctx.fillRect(player.x, player.y, player.size, player.size);
+        function resetGame() {
+            bacteria.clear();
+            bacteria.add("0,0"); // Start with one at the origin
+            moves = 0;
+            updateStatus();
+            draw();
         }
 
-        function updatePlayer() {
-            player.dy += player.gravity;
-            player.y += player.dy;
-
-            if (player.y + player.size > canvas.height) {
-                player.y = canvas.height - player.size;
-                player.dy = 0;
-                player.grounded = true;
-            } else {
-                player.grounded = false;
-            }
+        function init() {
+            const size = Math.min(window.innerWidth - 20, window.innerHeight - 250);
+            canvas.width = size;
+            canvas.height = size;
+            cellSize = (size - margin * 2) / (GRID_RES - 1);
+            draw();
         }
 
-        function handleJump() {
-            if (player.grounded) {
-                player.dy = -player.jumpForce;
-            }
-            if (!gameActive) resetGame();
-        }
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 1. Draw the Target Box (0,0 to 3,3)
+            ctx.fillStyle = 'rgba(77, 184, 255, 0.15)';
+            ctx.strokeStyle = '#4db8ff';
+            ctx.setLineDash([5, 5]);
+            const boxSize = cellSize * 3; 
+            // Origin is bottom-left (margin, canvas.height - margin)
+            ctx.fillRect(margin - cellSize/2, canvas.height - margin - boxSize - cellSize/2, boxSize + cellSize, boxSize + cellSize);
+            ctx.strokeRect(margin - cellSize/2, canvas.height - margin - boxSize - cellSize/2, boxSize + cellSize, boxSize + cellSize);
+            ctx.setLineDash([]);
 
-        // Touch listener for mobile
-        window.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            handleJump();
-        }, { passive: false });
-
-        function spawnObstacle() {
-            if (spawnTimer <= 0) {
-                obstacles.push({
-                    x: canvas.width,
-                    y: canvas.height - 40,
-                    w: 20,
-                    h: 40,
-                    speed: 5 + (score / 10) // Gets faster
-                });
-                spawnTimer = Math.random() * 60 + 70;
-            }
-            spawnTimer--;
-        }
-
-        function updateObstacles() {
-            for (let i = obstacles.length - 1; i >= 0; i--) {
-                obstacles[i].x -= obstacles[i].speed;
-
-                // Collision Check
-                if (player.x < obstacles[i].x + obstacles[i].w &&
-                    player.x + player.size > obstacles[i].x &&
-                    player.y < obstacles[i].y + obstacles[i].h &&
-                    player.y + player.size > obstacles[i].y) {
-                    gameActive = false;
-                }
-
-                if (obstacles[i].x + obstacles[i].w < 0) {
-                    obstacles.splice(i, 1);
-                    score++;
-                    ui.innerHTML = `Score: ${score}`;
-                }
-            }
-        }
-
-        function drawObstacles() {
+            // 2. Draw Grid Dots
             ctx.fillStyle = '#444';
-            obstacles.forEach(obs => {
-                ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+            for (let x = 0; x < GRID_RES; x++) {
+                for (let y = 0; y < GRID_RES; y++) {
+                    const px = margin + x * cellSize;
+                    const py = canvas.height - margin - y * cellSize;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // 3. Draw Bacteria
+            bacteria.forEach(pos => {
+                const [bx, by] = pos.split(',').map(Number);
+                const px = margin + bx * cellSize;
+                const py = canvas.height - margin - by * cellSize;
+
+                // Glowing effect
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#00e676';
+                ctx.fillStyle = '#00e676';
+                ctx.beginPath();
+                ctx.arc(px, py, cellSize * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
             });
         }
 
-        function resetGame() {
-            score = 0;
-            ui.innerHTML = `Score: 0`;
-            obstacles.length = 0;
-            gameActive = true;
-            player.y = canvas.height - 50;
-            loop();
-        }
+        function handleInteraction(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            const touchX = clientX - rect.left;
+            const touchY = clientY - rect.top;
 
-        function loop() {
-            if (!gameActive) {
-                ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                ctx.fillRect(0,0, canvas.width, canvas.height);
-                ctx.fillStyle = 'white';
-                ctx.textAlign = 'center';
-                ctx.fillText("GAME OVER - TOUCH TO RESTART", canvas.width/2, canvas.height/2);
-                return;
+            // Find closest grid point
+            const gridX = Math.round((touchX - margin) / cellSize);
+            const gridY = Math.round((canvas.height - margin - touchY) / cellSize);
+
+            const posKey = `${gridX},${gridY}`;
+
+            if (bacteria.has(posKey)) {
+                const upKey = `${gridX},${gridY + 1}`;
+                const rightKey = `${gridX + 1},${gridY}`;
+
+                // Rule: Target spots must be empty and within grid
+                if (gridX + 1 < GRID_RES && gridY + 1 < GRID_RES && 
+                    !bacteria.has(upKey) && !bacteria.has(rightKey)) {
+                    
+                    bacteria.delete(posKey);
+                    bacteria.add(upKey);
+                    bacteria.add(rightKey);
+                    moves++;
+                    updateStatus();
+                    draw();
+                }
             }
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            updatePlayer();
-            drawPlayer();
-            spawnObstacle();
-            updateObstacles();
-            drawObstacles();
-
-            requestAnimationFrame(loop);
         }
 
-        loop();
+        function updateStatus() {
+            let inBox = 0;
+            bacteria.forEach(pos => {
+                const [x, y] = pos.split(',').map(Number);
+                if (x >= 0 && x <= 3 && y >= 0 && y <= 3) inBox++;
+            });
+
+            if (inBox === 0) {
+                statusEl.innerHTML = `🏆 BOX CLEARED in ${moves} moves!`;
+                statusEl.style.color = "#00e676";
+            } else {
+                statusEl.innerHTML = `Moves: ${moves} | Cells in Box: ${inBox}`;
+                statusEl.style.color = "#ffeb3b";
+            }
+        }
+
+        // Mobile Touch
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleInteraction(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: false });
+
+        // Desktop Click
+        canvas.addEventListener('mousedown', (e) => {
+            handleInteraction(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('resize', init);
+        init();
+        resetGame();
     </script>
 </body>
 </html>
