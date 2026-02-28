@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Canvas Mobile Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
+        canvas { display: block; background: #87CEEB; margin: 0 auto; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; font-size: 20px; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="ui">Score: 0</div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const ui = document.getElementById('ui');
+
+        // Resize canvas to fit screen
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let score = 0;
+        let gameActive = true;
+
+        const player = {
+            x: 50,
+            y: canvas.height - 50,
+            size: 30,
+            dy: 0,
+            jumpForce: 12,
+            gravity: 0.6,
+            grounded: false
+        };
+
+        const obstacles = [];
+        let spawnTimer = 0;
+
+        function drawPlayer() {
+            ctx.fillStyle = '#FF5733';
+            ctx.fillRect(player.x, player.y, player.size, player.size);
+        }
+
+        function updatePlayer() {
+            player.dy += player.gravity;
+            player.y += player.dy;
+
+            if (player.y + player.size > canvas.height) {
+                player.y = canvas.height - player.size;
+                player.dy = 0;
+                player.grounded = true;
+            } else {
+                player.grounded = false;
+            }
+        }
+
+        function handleJump() {
+            if (player.grounded) {
+                player.dy = -player.jumpForce;
+            }
+            if (!gameActive) resetGame();
+        }
+
+        // Touch listener for mobile
+        window.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleJump();
+        }, { passive: false });
+
+        function spawnObstacle() {
+            if (spawnTimer <= 0) {
+                obstacles.push({
+                    x: canvas.width,
+                    y: canvas.height - 40,
+                    w: 20,
+                    h: 40,
+                    speed: 5 + (score / 10) // Gets faster
+                });
+                spawnTimer = Math.random() * 60 + 70;
+            }
+            spawnTimer--;
+        }
+
+        function updateObstacles() {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].x -= obstacles[i].speed;
+
+                // Collision Check
+                if (player.x < obstacles[i].x + obstacles[i].w &&
+                    player.x + player.size > obstacles[i].x &&
+                    player.y < obstacles[i].y + obstacles[i].h &&
+                    player.y + player.size > obstacles[i].y) {
+                    gameActive = false;
+                }
+
+                if (obstacles[i].x + obstacles[i].w < 0) {
+                    obstacles.splice(i, 1);
+                    score++;
+                    ui.innerHTML = `Score: ${score}`;
+                }
+            }
+        }
+
+        function drawObstacles() {
+            ctx.fillStyle = '#444';
+            obstacles.forEach(obs => {
+                ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+            });
+        }
+
+        function resetGame() {
+            score = 0;
+            ui.innerHTML = `Score: 0`;
+            obstacles.length = 0;
+            gameActive = true;
+            player.y = canvas.height - 50;
+            loop();
+        }
+
+        function loop() {
+            if (!gameActive) {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(0,0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.fillText("GAME OVER - TOUCH TO RESTART", canvas.width/2, canvas.height/2);
+                return;
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            updatePlayer();
+            drawPlayer();
+            spawnObstacle();
+            updateObstacles();
+            drawObstacles();
+
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+    </script>
+</body>
+</html>
